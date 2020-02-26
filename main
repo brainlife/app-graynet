@@ -1,0 +1,30 @@
+#!/bin/bash
+#PBS -l nodes=1:ppn=8,vmem=32gb,walltime=0:30:00
+#PBS -N app-graynet
+
+set -e
+set -x
+
+[ -z "$FREESURFER_LICENSE" ] && echo "Please set FREESURFER_LICENSE in .bashrc" && exit 1;
+echo $FREESURFER_LICENSE > license.txt
+
+#mkdir -p output
+freesurfer=$(jq -r '.freesurfer' config.json)
+
+#create -qcache on existing freesurfer output as brainlife app-freesurfer doesn't create it
+[ ! -e input ] && cp -r $(dirname $freesurfer) input
+time singularity exec -e -B `pwd`/license.txt:/usr/local/freesurfer/license.txt docker://brainlife/freesurfer:6.0.0 \
+    recon-all -sd input -subjid output -qcache
+
+echo "output" > subjects.txt
+rm -rf output #graynet will fail if output directory already exists
+#now run graynet
+time singularity exec -e docker://brainlife/graynet:0.4.8 graynet \
+    -i input \
+    -o ./output \
+    -s subjects.txt \
+    -f freesurfer_thickness \
+    -w manhattan
+#-s subject.txt \
+#-p 10
+#-a fsaverage \
